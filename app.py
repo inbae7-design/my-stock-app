@@ -22,18 +22,27 @@ if 'history' not in st.session_state:
 if 'search_query' not in st.session_state:
     st.session_state.search_query = ""
 
+# --- [수정된 부분] KRX 서버 차단 시 앱이 터지지 않도록 예외 처리 ---
 @st.cache_data
 def load_krx_data():
-    return fdr.StockListing('KRX')
+    try:
+        return fdr.StockListing('KRX')
+    except Exception:
+        # 에러가 나면 빈 데이터프레임을 반환하여 에러를 삼킵니다.
+        return pd.DataFrame(columns=['Name', 'Code', 'Market'])
 
 def get_ticker_from_name(name, krx_df):
     if name.encode().isalpha():
         return name.upper()
-    match = krx_df[krx_df['Name'] == name]
-    if not match.empty:
-        code = match.iloc[0]['Code']
-        market = match.iloc[0]['Market']
-        return f"{code}.KS" if 'KOSPI' in market else f"{code}.KQ"
+    
+    # 데이터가 비어있지 않을 때만 이름 검색을 수행합니다.
+    if not krx_df.empty:
+        match = krx_df[krx_df['Name'] == name]
+        if not match.empty:
+            code = match.iloc[0]['Code']
+            market = match.iloc[0]['Market']
+            return f"{code}.KS" if 'KOSPI' in market else f"{code}.KQ"
+    
     return name
 
 # --- 사이드바: 설정 및 검색 기록 ---
@@ -52,7 +61,7 @@ st.title("📈 프로급 실시간 주식 차트 웹 서비스")
 
 col1, col2, col3 = st.columns([3, 1, 1])
 with col1:
-    search_input = st.text_input("회사명 또는 종목코드 (예: 삼성전자, AAPL)", value=st.session_state.search_query)
+    search_input = st.text_input("회사명 또는 종목코드 (예: 삼성전자, AAPL, 005930.KS)", value=st.session_state.search_query)
 with col2:
     interval = st.selectbox("시간 간격", ["1m", "1h", "1d", "1wk", "1mo"], index=2)
 with col3:
@@ -69,6 +78,11 @@ if search_btn or search_input:
         st.session_state.history = st.session_state.history[:10]
 
         krx_df = load_krx_data()
+        
+        # --- [추가된 부분] 한글 검색 기능이 막혔을 때 사용자에게 안내 ---
+        if krx_df.empty and not search_input.encode().isalpha():
+            st.warning("⚠️ 현재 클라우드 서버 보안 문제로 한글 종목명 검색이 제한되어 있습니다. 한국 주식은 종목 코드(예: 005930.KS)를 입력해 주세요.")
+
         ticker = get_ticker_from_name(search_input, krx_df)
         
         period_map = {'1m': '7d', '1h': '730d', '1d': '5y', '1wk': '5y', '1mo': '10y'}
@@ -84,8 +98,7 @@ if search_btn or search_input:
                     if isinstance(df.columns, pd.MultiIndex):
                         df.columns = df.columns.droplevel(1)
 
-                    # 1. 보조지표 계산 로직 추가
-                    # RSI 계산 (14일 기준)
+                    # RSI 계산
                     delta = df['Close'].diff()
                     up = delta.clip(lower=0)
                     down = -1 * delta.clip(upper=0)
@@ -94,39 +107,36 @@ if search_btn or search_input:
                     rs = ema_up / ema_down
                     df['RSI'] = 100 - (100 / (1 + rs))
 
-                    # MACD 계산 (12일, 26일, 9일 기준)
+                    # MACD 계산
                     exp1 = df['Close'].ewm(span=12, adjust=False).mean()
                     exp2 = df['Close'].ewm(span=26, adjust=False).mean()
                     df['MACD'] = exp1 - exp2
                     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
                     df['MACD_Hist'] = df['MACD'] - df['Signal']
 
-                    # 2. 체크박스 상태에 따라 차트에 추가할 패널(층) 구성
+                    # 차트 패널 구성
                     apds = []
-                    panel_ratios = [3, 1] # 기본 [캔들차트 3 : 거래량 1] 비율
-                    current_panel = 2     # MACD, RSI가 들어갈 층수
+                    panel_ratios = [3, 1] 
+                    current_panel = 2     
 
                     if show_macd:
                         apds.append(mpf.make_addplot(df['MACD'], panel=current_panel, color='fuchsia', secondary_y=False))
                         apds.append(mpf.make_addplot(df['Signal'], panel=current_panel, color='b', secondary_y=False))
                         apds.append(mpf.make_addplot(df['MACD_Hist'], type='bar', panel=current_panel, color='dimgray', secondary_y=False))
-                        panel_ratios.append(1) # MACD 패널 비율 1 추가
+                        panel_ratios.append(1) 
                         current_panel += 1
 
                     if show_rsi:
                         apds.append(mpf.make_addplot(df['RSI'], panel=current_panel, color='purple', ylabel='RSI', secondary_y=False))
-                        # RSI 과매수(70)/과매도(30) 기준선 추가
                         apds.append(mpf.make_addplot([70]*len(df), panel=current_panel, color='r', linestyle='dashed', secondary_y=False))
                         apds.append(mpf.make_addplot([30]*len(df), panel=current_panel, color='b', linestyle='dashed', secondary_y=False))
-                        panel_ratios.append(1) # RSI 패널 비율 1 추가
+                        panel_ratios.append(1) 
                         current_panel += 1
 
                     dt_format = '%y-%m-%d %H:%M' if interval in ['1m', '1h'] else '%Y-%m-%d'
                     mc = mpf.make_marketcolors(up='red', down='blue', edge='inherit', wick='inherit', volume='inherit')
                     korean_style = mpf.make_mpf_style(marketcolors=mc, gridstyle='--')
 
-                    # 3. addplot과 동적 패널 비율(panel_ratios)을 적용하여 차트 그리기
-                    # 지표가 늘어날 때마다 차트의 세로 길이(figsize)도 동적으로 늘려줍니다.
                     fig_height = 7 + (current_panel - 2) * 2.5
                     fig, axes = mpf.plot(df, type='candle', volume=True, mav=(5, 20),
                                          style=korean_style, datetime_format=dt_format,
@@ -134,7 +144,6 @@ if search_btn or search_input:
                                          addplot=apds, panel_ratios=panel_ratios,
                                          returnfig=True, figsize=(12, fig_height))
 
-                    # 가격 및 거래량 축 콤마 포맷팅
                     ax_main, ax_vol = axes[0], axes[2]
                     
                     if ticker.endswith('.KS') or ticker.endswith('.KQ'):
