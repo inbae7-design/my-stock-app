@@ -26,11 +26,10 @@ if 'history' not in st.session_state:
 if 'search_query' not in st.session_state:
     st.session_state.search_query = ""
     
-# [추가] 온유 일정을 위한 세션 상태
 if 'attendance' not in st.session_state:
-    st.session_state.attendance = set() # 등하교 체크한 날짜들을 저장할 집합(중복 방지)
+    st.session_state.attendance = set() 
 if 'academies' not in st.session_state:
-    st.session_state.academies = [] # 학원 목록 저장 리스트
+    st.session_state.academies = [] 
 
 # --- 공통 함수 ---
 @st.cache_data
@@ -185,10 +184,9 @@ elif menu == "📈 주식 차트":
 elif menu == "👧 아이 일정":
     st.title("👧 온유 일정 관리")
     
-    # 탭(Tab) 기능을 사용하여 하위 메뉴 생성
     tab1, tab2 = st.tabs(["🏫 1. 학교 일정 (등하교 체크)", "🎒 2. 학원 일정 (스케쥴표)"])
     
-    # --- 하위 메뉴 1: 학교 일정 (등하교 체크) ---
+    # --- 하위 메뉴 1: 학교 일정 ---
     with tab1:
         st.subheader("✅ 오늘 학교에 잘 다녀왔나요?")
         st.markdown("달력에서 날짜를 선택하고 출석 체크를 해주세요.")
@@ -197,44 +195,39 @@ elif menu == "👧 아이 일정":
         with col_date:
             check_date = st.date_input("날짜 선택", datetime.date.today())
         with col_btn:
-            st.write("") # 간격 맞춤
+            st.write("") 
             st.write("")
             if st.button("🏫 등교 완료! (체크하기)", use_container_width=True):
                 date_str = check_date.strftime("%Y-%m-%d")
                 if date_str not in st.session_state.attendance:
                     st.session_state.attendance.add(date_str)
                     st.success(f"🎉 {date_str} - 등교 기록이 성공적으로 저장되었습니다!")
-                    st.balloons() # 축하 애니메이션
+                    st.balloons() 
                 else:
                     st.warning("이미 체크가 완료된 날짜입니다.")
         
         st.markdown("---")
         st.subheader("🗓️ 등교 완료 기록")
         if st.session_state.attendance:
-            # 집합(set)을 정렬된 리스트로 변환하여 보기 좋게 출력
             sorted_dates = sorted(list(st.session_state.attendance), reverse=True)
-            
-            # Pandas DataFrame으로 표처럼 깔끔하게 보여주기
             df_attendance = pd.DataFrame({"✅ 학교 간 날짜": sorted_dates})
-            df_attendance.index = range(1, len(df_attendance) + 1) # 인덱스를 1부터 시작
+            df_attendance.index = range(1, len(df_attendance) + 1) 
             st.dataframe(df_attendance, use_container_width=True)
         else:
             st.info("아직 체크된 등교 기록이 없습니다.")
 
-    # --- 하위 메뉴 2: 학원 일정 (스케쥴표) ---
+    # --- 하위 메뉴 2: 학원 일정 (수정 기능 추가) ---
     with tab2:
-        st.subheader("🎒 다니는 학원 등록하기")
+        st.subheader("🎒 다니는 학원 추가하기")
         
-        # 학원 등록 입력 폼
         with st.form("academy_form", clear_on_submit=True):
             col_name, col_days, col_time = st.columns([2, 3, 2])
             with col_name:
                 aca_name = st.text_input("학원 이름 (예: 피아노, 영어)")
             with col_days:
-                # 다중 선택(멀티 셀렉트) 드롭다운
                 aca_days = st.multiselect("요일 선택", ["월", "화", "수", "목", "금", "토", "일"])
             with col_time:
-                aca_time = st.time_input("시간", datetime.time(14, 0)) # 기본값 오후 2시
+                aca_time = st.time_input("시간", datetime.time(14, 0)) 
                 
             submit_aca = st.form_submit_button("학원 스케쥴 추가")
             
@@ -250,11 +243,19 @@ elif menu == "👧 아이 일정":
                     st.error("학원 이름과 요일을 모두 입력해 주세요.")
                     
         st.markdown("---")
-        st.subheader("📊 온유의 주간 학원 시간표")
+        
+        # --- [수정된 부분] 엑셀처럼 직접 편집 가능한 표 (data_editor) 적용 ---
+        st.subheader("📊 온유의 주간 학원 시간표 (직접 수정 가능)")
+        st.info("💡 **수정 방법:** 표 안의 글자를 **더블 클릭**하면 내용을 바로 바꿀 수 있습니다.\n\n💡 **삭제 방법:** 삭제하고 싶은 행(줄)의 제일 왼쪽 번호 부분을 클릭해서 선택한 뒤, 키보드의 `Delete` 키를 누르면 지워집니다.")
+        
+        # 데이터가 없을 때도 표의 틀(컬럼)을 보여주기 위해 처리
         if st.session_state.academies:
-            # 등록된 학원 리스트를 표(Table) 형태로 출력
             df_academies = pd.DataFrame(st.session_state.academies)
-            df_academies.index = range(1, len(df_academies) + 1)
-            st.table(df_academies)
         else:
-            st.info("아직 등록된 학원 스케쥴이 없습니다.")
+            df_academies = pd.DataFrame(columns=["학원명", "요일", "시간"])
+            
+        # 엑셀처럼 편집 가능한 표 띄우기 (num_rows="dynamic" 옵션이 삭제/추가를 가능하게 함)
+        edited_df = st.data_editor(df_academies, num_rows="dynamic", use_container_width=True)
+        
+        # 사용자가 수정한 표의 내용을 실시간으로 다시 저장하여 동기화
+        st.session_state.academies = edited_df.to_dict('records')
