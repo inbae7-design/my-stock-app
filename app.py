@@ -1,4 +1,22 @@
-import streamlit as st
+# --- 페이지 기본 설정 ---
+st.set_page_config(page_title="나만의 대시보드", layout="wide", page_icon="📱")
+
+# --- [추가된 부분] 모바일 앱 느낌을 위한 웹사이트 흔적 지우기 ---
+hide_web_ui = """
+    <style>
+    #MainMenu {visibility: hidden;} /* 우측 상단 햄버거 메뉴 숨기기 */
+    header {visibility: hidden;} /* 상단 빈 공간(헤더) 숨기기 */
+    footer {visibility: hidden;} /* 하단 'Made with Streamlit' 숨기기 */
+    .block-container {
+        padding-top: 2rem; /* 상단 여백 줄이기 */
+        padding-bottom: 0rem; /* 하단 여백 줄이기 */
+    }
+    </style>
+    """
+st.markdown(hide_web_ui, unsafe_allow_html=True)
+# -----------------------------------------------------------
+
+# --- 한글 폰트 설정 --- (이하 기존 코드와 동일)import streamlit as st
 import pandas as pd
 import datetime
 import gspread
@@ -239,3 +257,4 @@ with tab_academy:
         st.rerun()
         
     st.markdown('</div>', unsafe_allow_html=True)
+
