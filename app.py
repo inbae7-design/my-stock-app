@@ -9,7 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # 1. 👧 폰 화면에 딱 맞는 모바일 디자인 설정
 # ==========================================
 st.set_page_config(
-    page_title="온유 스케줄 매니저", 
+    page_title="온유일정", 
     page_icon="👧",
     layout="wide",
     initial_sidebar_state="collapsed", 
@@ -169,3 +169,4 @@ with tab_academy:
         st.success("동기화 완료!")
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
+
