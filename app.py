@@ -9,7 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # 1. 👧 초등학생 맞춤 활기찬 모바일 디자인 설정
 # ==========================================
 st.set_page_config(
-    page_title="온유 스케줄 매니저", 
+    page_title="온유스케줄", 
     page_icon="👧",
     layout="wide",
     initial_sidebar_state="collapsed", # 모바일 최적화: 사이드바 닫기
@@ -201,3 +201,4 @@ with tab_academy:
         st.rerun()
         
     st.markdown('</div>', unsafe_allow_html=True)
+
