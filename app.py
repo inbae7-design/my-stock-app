@@ -103,7 +103,7 @@ client = init_connection()
 
 def get_worksheet(title, headers=[]):
     # 시트 이름이 다를 경우 아래 "온유 스케줄 매니저"를 어제 만드신 구글 시트 파일명으로 바꿔주세요.
-    doc = client.open("온유 스케줄 매니저") 
+    doc = client.open("온유스케줄") 
     try:
         ws = doc.worksheet(title)
     except gspread.exceptions.WorksheetNotFound:
@@ -201,4 +201,5 @@ with tab_academy:
         st.rerun()
         
     st.markdown('</div>', unsafe_allow_html=True)
+
 
