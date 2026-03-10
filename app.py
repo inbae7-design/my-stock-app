@@ -1,260 +1,270 @@
-# --- 페이지 기본 설정 ---
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import mplfinance as mpf
+import FinanceDataReader as fdr
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker_module
+import platform
+import datetime
+
+# --- 1. 페이지 기본 설정 (반드시 import 바로 다음에 와야 합니다) ---
 st.set_page_config(page_title="나만의 대시보드", layout="wide", page_icon="📱")
 
-# --- [추가된 부분] 모바일 앱 느낌을 위한 웹사이트 흔적 지우기 ---
+# --- 2. 모바일 앱 느낌을 위한 웹사이트 흔적 지우기 ---
 hide_web_ui = """
-    <style>
-    #MainMenu {visibility: hidden;} /* 우측 상단 햄버거 메뉴 숨기기 */
-    header {visibility: hidden;} /* 상단 빈 공간(헤더) 숨기기 */
-    footer {visibility: hidden;} /* 하단 'Made with Streamlit' 숨기기 */
-    .block-container {
-        padding-top: 2rem; /* 상단 여백 줄이기 */
-        padding-bottom: 0rem; /* 하단 여백 줄이기 */
-    }
-    </style>
-    """
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 0rem;
+}
+</style>
+"""
 st.markdown(hide_web_ui, unsafe_allow_html=True)
-# -----------------------------------------------------------
 
-# --- 한글 폰트 설정 --- (이하 기존 코드와 동일)import streamlit as st
-import pandas as pd
-import datetime
-import gspread
-import json
-from oauth2client.service_account import ServiceAccountCredentials
+# --- 3. 한글 폰트 설정 ---
+if platform.system() == 'Windows':
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+elif platform.system() == 'Darwin':
+    plt.rcParams['font.family'] = 'AppleGothic'
+else:
+    plt.rcParams['font.family'] = 'NanumGothic'
+plt.rcParams['axes.unicode_minus'] = False
 
-# ==========================================
-# 👧 초등학생 맞춤 활기찬 모바일 디자인 설정
-# ==========================================
-st.set_page_config(
-    page_title="온유 스케줄 매니저", 
-    page_icon="👧",
-    initial_sidebar_state="collapsed", # 모바일은 사이드바 닫기
-)
+# --- 4. 세션 상태(Session State) 초기화 ---
+if 'history' not in st.session_state:
+    st.session_state.history = []
+if 'search_query' not in st.session_state:
+    st.session_state.search_query = ""
+if 'attendance' not in st.session_state:
+    st.session_state.attendance = set() 
+if 'academies' not in st.session_state:
+    st.session_state.academies = [] 
 
-# --- 커스텀 CSS (세련된Elementary 스타일) ---
-st.markdown("""
-    <style>
-        /* 전체 배경색 - 따뜻한 파스텔 화이트 */
-        .stApp {
-            background-color: #fcf8f3;
-        }
-        
-        /* 메인 타이틀 - 활기찬 민트 그린 & 둥근 폰트 */
-        h1 {
-            color: #26b99a; 
-            font-family: 'Malgun Gothic', 'AppleGothic', sans-serif;
-            border-bottom: 3px solid #f9f06b; /* 하단 노란 포인트 */
-            padding-bottom: 10px;
-            font-weight: bold;
-        }
-        
-        /* 탭 바 설정 - 둥글고 활기찬 컬러 */
-        .stTabs [data-baseweb="tab-list"] {
-            border-radius: 15px;
-            background-color: white;
-            padding: 5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .stTabs [data-baseweb="tab"] {
-            font-weight: bold;
-            font-size: 1.1em;
-            color: #333;
-            background-color: #f1f1f1;
-            border-radius: 12px;
-            margin: 0 5px;
-            padding: 10px 15px;
-            transition: 0.3s;
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #26b99a !important; /* 선택 시 민트색 */
-            color: white !important;
-        }
-        
-        /* 카드형 섹션 (Home, School, Academy 다르게) */
-        .onyu-card {
-            background-color: white;
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 6px 12px rgba(0,0,0,0.08);
-            border-top-width: 8px; /* 상단 포인트 컬러 */
-            border-top-style: solid;
-        }
-        .home-card { border-top-color: #f7a4a9; } /* 핑크 */
-        .school-card { border-top-color: #89cff0; } /* 스카이 블루 */
-        .academy-card { border-top-color: #f9f06b; } /* 옐로우 */
-        
-        /* 입력창 디자인 - 둥글게 */
-        .stTextInput input, .stTextArea textarea, .stDateInput div, .stTimeInput div {
-            border-radius: 12px;
-            border: 2px solid #e1e1e1;
-        }
-        .stTextInput input:focus, .stTextArea textarea:focus, .stDateInput div:focus, .stTimeInput div:focus {
-            border-color: #26b99a;
-            box-shadow: 0 0 5px rgba(38, 185, 154, 0.3);
-        }
-        
-        /* 버튼 디자인 - 활기찬 민트 & 둥글게 */
-        .stButton>button {
-            border-radius: 15px;
-            background-color: #26b99a;
-            color: white;
-            font-weight: bold;
-            border: none;
-            padding: 12px 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: 0.3s;
-        }
-        .stButton>button:hover {
-            background-color: #21a187;
-            box-shadow: 0 6px 10px rgba(0,0,0,0.15);
-        }
-        
-        /* 데이터 편집기 (학원 시간표) */
-        [data-testid="stDataEditor"] {
-            background-color: white;
-            border-radius: 15px;
-            overflow: hidden;
-            border: 2px solid #e1e1e1;
-        }
-        /* 테이블 헤더 컬러 */
-        [data-testid="stDataEditor"] div[role="columnheader"] {
-            background-color: #e6faf6;
-            font-weight: bold;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-
-# ==========================================
-# ☁️ 구글 스프레드시트 연결 및 초기 세팅
-# ==========================================
-@st.cache_resource
-def init_connection():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds_dict = json.loads(st.secrets["google_json"])
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
-    return client
-
-try:
-    client = init_connection()
-    # 내 구글 드라이브에 만든 엑셀 파일 이름과 정확히 일치해야 합니다.
-    sheet = client.open("온유스케줄") 
-except Exception as e:
-    st.error("⚠️ 구글 스프레드시트 연결 실패! 파일 이름('온유스케줄')이 맞는지, 로봇 이메일을 '편집자'로 공유했는지 다시 확인해주세요.")
-    st.stop()
-
-# --- 엑셀 안의 하위 시트(탭) 자동으로 만들기 ---
-def get_worksheet(title, headers=[]):
+# --- 5. 공통 함수 ---
+@st.cache_data
+def load_krx_data():
     try:
-        ws = sheet.worksheet(title)
-    except gspread.exceptions.WorksheetNotFound:
-        # 시트가 없으면 앱이 알아서 새로 만듭니다.
-        ws = sheet.add_worksheet(title=title, rows="100", cols="20")
-        if headers:
-            ws.append_row(headers)
-    return ws
+        return fdr.StockListing('KRX')
+    except Exception:
+        return pd.DataFrame(columns=['Name', 'Code', 'Market'])
 
-# 3개의 하위 시트 준비
-ws_memo = get_worksheet("메모")
-ws_school = get_worksheet("학교", ["날짜"])
-ws_academy = get_worksheet("학원", ["학원명", "요일", "시간"])
-
+def get_ticker_from_name(name, krx_df):
+    if name.encode().isalpha():
+        return name.upper()
+    if not krx_df.empty:
+        match = krx_df[krx_df['Name'] == name]
+        if not match.empty:
+            code = match.iloc[0]['Code']
+            market = match.iloc[0]['Market']
+            return f"{code}.KS" if 'KOSPI' in market else f"{code}.KQ"
+    return name
 
 # ==========================================
-# 📱 메인 화면 UI 시작
+# 사이드바: 메인 메뉴 구성
 # ==========================================
-st.title("👧 온유 스케줄 매니저")
-st.markdown("구글 시트에 영구 저장되는 온유만의 전용 앱! ☁️")
+st.sidebar.title("📌 메인 메뉴")
+menu = st.sidebar.radio("이동할 페이지를 선택하세요:", ["🏠 홈", "📈 주식 차트", "👧 아이 일정"])
+st.sidebar.markdown("---")
 
-# 모바일 터치 최적화 상단 탭 (Vibrant & Elegant 스타일)
-tab_home, tab_school, tab_academy = st.tabs(["🏠 홈", "🏫 학교 기록", "🎒 학원 시간표"])
+# ==========================================
+# 1. 홈 화면 (Home)
+# ==========================================
+if menu == "🏠 홈":
+    st.title("환영합니다! ✨")
+    st.markdown("""
+    ### 나만의 웹 대시보드에 오신 것을 환영합니다.
+    좌측 메뉴를 선택하여 원하는 기능을 이용해 보세요.
+    
+    * **📈 주식 차트:** 한국/미국 주식 검색 및 프로급 차트 (MACD, RSI 지원)
+    * **👧 아이 일정:** 온유의 학교 등하교 체크 및 학원 시간표 관리
+    """)
 
-# --- 1. 홈 화면 (메모장 -> 구글 시트 연동) ---
-with tab_home:
-    st.markdown('<div class="onyu-card home-card">', unsafe_allow_html=True)
+# ==========================================
+# 2. 주식 차트 메뉴 (Stock)
+# ==========================================
+elif menu == "📈 주식 차트":
+    st.title("📈 프로급 실시간 주식 차트")
     
-    st.subheader("오늘의 한 줄 메모 📝")
-    # 구글 시트의 A1 셀 값 읽어오기
-    current_memo = ws_memo.acell('A1').value if ws_memo.acell('A1').value else "오늘도 즐거운 하루 보내세요! 😊"
+    st.sidebar.subheader("⚙️ 차트 설정")
+    show_macd = st.sidebar.checkbox("MACD 보조지표 켜기", value=False)
+    show_rsi = st.sidebar.checkbox("RSI 보조지표 켜기", value=False)
     
-    with st.form("memo_form"):
-        memo_input = st.text_area("메모장", value=current_memo, height=150, label_visibility="collapsed")
-        if st.form_submit_button("메모 구글에 저장하기", use_container_width=True):
-            ws_memo.update_acell('A1', memo_input)
-            st.success("구글 시트에 메모가 안전하게 저장되었습니다!")
-            st.rerun() # 화면 새로고침
-            
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.sidebar.subheader("🕒 최근 검색")
+    for item in st.session_state.history:
+        if st.sidebar.button(item, key=f"btn_{item}"):
+            st.session_state.search_query = item
 
-# --- 2. 학교 일정 (출석 기록 -> 구글 시트 연동) ---
-with tab_school:
-    st.markdown('<div class="onyu-card school-card">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        search_input = st.text_input("회사명 또는 종목코드 (예: 삼성전자, AAPL)", value=st.session_state.search_query)
+    with col2:
+        interval = st.selectbox("시간 간격", ["1m", "1h", "1d", "1wk", "1mo"], index=2)
+    with col3:
+        st.write("") 
+        st.write("")
+        search_btn = st.button("차트 그리기", use_container_width=True)
+
+    if search_btn or search_input:
+        if search_input:
+            if search_input in st.session_state.history:
+                st.session_state.history.remove(search_input)
+            st.session_state.history.insert(0, search_input)
+            st.session_state.history = st.session_state.history[:10]
+
+            krx_df = load_krx_data()
+            if krx_df.empty and not search_input.encode().isalpha():
+                st.warning("⚠️ 현재 클라우드 서버 보안 문제로 한글 검색이 제한되어 있습니다. 종목 코드를 입력해 주세요.")
+
+            ticker = get_ticker_from_name(search_input, krx_df)
+            period_map = {'1m': '7d', '1h': '730d', '1d': '5y', '1wk': '5y', '1mo': '10y'}
+            period = period_map.get(interval, '1y')
+
+            with st.spinner('데이터를 분석하고 차트를 그리는 중입니다...'):
+                try:
+                    df = yf.download(ticker, period=period, interval=interval)
+                    
+                    if df.empty:
+                        st.error("데이터를 찾을 수 없습니다. 회사명이나 종목 코드를 확인해 주세요.")
+                    else:
+                        if isinstance(df.columns, pd.MultiIndex):
+                            df.columns = df.columns.droplevel(1)
+
+                        delta = df['Close'].diff()
+                        up = delta.clip(lower=0)
+                        down = -1 * delta.clip(upper=0)
+                        ema_up = up.ewm(com=13, adjust=False).mean()
+                        ema_down = down.ewm(com=13, adjust=False).mean()
+                        rs = ema_up / ema_down
+                        df['RSI'] = 100 - (100 / (1 + rs))
+
+                        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+                        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+                        df['MACD'] = exp1 - exp2
+                        df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+                        df['MACD_Hist'] = df['MACD'] - df['Signal']
+
+                        apds = []
+                        panel_ratios = [3, 1] 
+                        current_panel = 2     
+
+                        if show_macd:
+                            apds.append(mpf.make_addplot(df['MACD'], panel=current_panel, color='fuchsia', secondary_y=False))
+                            apds.append(mpf.make_addplot(df['Signal'], panel=current_panel, color='b', secondary_y=False))
+                            apds.append(mpf.make_addplot(df['MACD_Hist'], type='bar', panel=current_panel, color='dimgray', secondary_y=False))
+                            panel_ratios.append(1) 
+                            current_panel += 1
+
+                        if show_rsi:
+                            apds.append(mpf.make_addplot(df['RSI'], panel=current_panel, color='purple', ylabel='RSI', secondary_y=False))
+                            apds.append(mpf.make_addplot([70]*len(df), panel=current_panel, color='r', linestyle='dashed', secondary_y=False))
+                            apds.append(mpf.make_addplot([30]*len(df), panel=current_panel, color='b', linestyle='dashed', secondary_y=False))
+                            panel_ratios.append(1) 
+                            current_panel += 1
+
+                        dt_format = '%y-%m-%d %H:%M' if interval in ['1m', '1h'] else '%Y-%m-%d'
+                        mc = mpf.make_marketcolors(up='red', down='blue', edge='inherit', wick='inherit', volume='inherit')
+                        korean_style = mpf.make_mpf_style(marketcolors=mc, gridstyle='--')
+
+                        fig_height = 7 + (current_panel - 2) * 2.5
+                        fig, axes = mpf.plot(df, type='candle', volume=True, mav=(5, 20),
+                                             style=korean_style, datetime_format=dt_format,
+                                             show_nontrading=False, warn_too_much_data=10000, 
+                                             addplot=apds, panel_ratios=panel_ratios,
+                                             returnfig=True, figsize=(12, fig_height))
+
+                        ax_main, ax_vol = axes[0], axes[2]
+                        if ticker.endswith('.KS') or ticker.endswith('.KQ'):
+                            ax_main.yaxis.set_major_formatter(ticker_module.StrMethodFormatter('{x:,.0f}'))
+                        else:
+                            ax_main.yaxis.set_major_formatter(ticker_module.StrMethodFormatter('{x:,.2f}'))
+                        ax_vol.yaxis.set_major_formatter(ticker_module.StrMethodFormatter('{x:,.0f}'))
+
+                        display_title = f"{search_input} ({ticker}) 주가 흐름" if search_input != ticker else f"{ticker} 주가 흐름"
+                        ax_main.set_title(display_title, fontweight='bold', fontsize=16, pad=15)
+
+                        st.pyplot(fig)
+                        
+                except Exception as e:
+                    st.error(f"오류가 발생했습니다: {e}")
+
+# ==========================================
+# 3. 아이 일정 메뉴 (Child's Schedule)
+# ==========================================
+elif menu == "👧 아이 일정":
+    st.title("👧 온유 일정 관리")
     
-    st.subheader("✅ 오늘 학교 다녀왔나요?")
-    # 구글 시트의 A열 데이터를 모두 읽어옵니다 (첫 줄 '날짜' 제목 제외)
-    records = ws_school.col_values(1)[1:] 
-    attendance_set = set(records)
+    tab1, tab2 = st.tabs(["🏫 1. 학교 일정 (등하교 체크)", "🎒 2. 학원 일정 (스케쥴표)"])
     
-    check_date = st.date_input("날짜 선택", datetime.date.today())
-    
-    if st.button("🏫 등교 완료! (구글 시트에 기록)", use_container_width=True):
-        date_str = check_date.strftime("%Y-%m-%d")
-        if date_str not in attendance_set:
-            ws_school.append_row([date_str]) # 구글 시트 맨 아랫줄에 날짜 추가
-            st.success(f"🎉 {date_str} - 출석 기록이 구글에 저장되었습니다!")
-            st.balloons()
-            st.rerun()
+    # --- 하위 메뉴 1: 학교 일정 ---
+    with tab1:
+        st.subheader("✅ 오늘 학교에 잘 다녀왔나요?")
+        st.markdown("달력에서 날짜를 선택하고 출석 체크를 해주세요.")
+        
+        col_date, col_btn = st.columns([1, 1])
+        with col_date:
+            check_date = st.date_input("날짜 선택", datetime.date.today())
+        with col_btn:
+            st.write("") 
+            st.write("")
+            if st.button("🏫 등교 완료! (체크하기)", use_container_width=True):
+                date_str = check_date.strftime("%Y-%m-%d")
+                if date_str not in st.session_state.attendance:
+                    st.session_state.attendance.add(date_str)
+                    st.success(f"🎉 {date_str} - 등교 기록이 성공적으로 저장되었습니다!")
+                    st.balloons() 
+                else:
+                    st.warning("이미 체크가 완료된 날짜입니다.")
+        
+        st.markdown("---")
+        st.subheader("🗓️ 등교 완료 기록")
+        if st.session_state.attendance:
+            sorted_dates = sorted(list(st.session_state.attendance), reverse=True)
+            df_attendance = pd.DataFrame({"✅ 학교 간 날짜": sorted_dates})
+            df_attendance.index = range(1, len(df_attendance) + 1) 
+            st.dataframe(df_attendance, use_container_width=True)
         else:
-            st.warning("이미 체크가 완료된 날짜입니다.")
-            
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown('---')
-    st.subheader("🗓️ 전체 등교 기록")
-    if records:
-        sorted_dates = sorted(records, reverse=True)
-        df_attendance = pd.DataFrame({"✅ 학교 간 날짜": sorted_dates})
-        df_attendance.index = range(1, len(df_attendance) + 1)
-        st.dataframe(df_attendance, use_container_width=True)
-    else:
-        st.info("아직 구글 시트에 기록된 데이터가 없습니다.")
+            st.info("아직 체크된 등교 기록이 없습니다.")
 
-# --- 3. 학원 일정 (시간표 관리 -> 구글 시트 연동) ---
-with tab_academy:
-    st.markdown('<div class="onyu-card academy-card">', unsafe_allow_html=True)
-    
-    st.subheader("📊 온유 학원 시간표")
-    # 구글 시트에서 전체 시간표 데이터 읽어오기
-    aca_records = ws_academy.get_all_records()
-    if aca_records:
-        df_academies = pd.DataFrame(aca_records)
-    else:
-        df_academies = pd.DataFrame(columns=["학원명", "요일", "시간"])
+    # --- 하위 메뉴 2: 학원 일정 ---
+    with tab2:
+        st.subheader("🎒 다니는 학원 추가하기")
         
-    st.info("💡 **수정/삭제:** 표 안의 글자를 더블 터치해 고치거나, 왼쪽 체크박스를 누르고 쓰레기통 아이콘을 누르세요.\n\n💡 **저장 필수:** 표를 수정한 뒤 반드시 아래의 파란색 저장 버튼을 눌러야 구글에 반영됩니다.")
-    
-    # 편집 가능한 표 (새 행 추가/삭제 모두 지원)
-    edited_df = st.data_editor(df_academies, num_rows="dynamic", use_container_width=True)
-    
-    if st.button("💾 수정한 시간표 구글에 덮어쓰기", use_container_width=True):
-        # 1. 시트를 싹 비우기
-        ws_academy.clear()
+        with st.form("academy_form", clear_on_submit=True):
+            col_name, col_days, col_time = st.columns([2, 3, 2])
+            with col_name:
+                aca_name = st.text_input("학원 이름 (예: 피아노, 영어)")
+            with col_days:
+                aca_days = st.multiselect("요일 선택", ["월", "화", "수", "목", "금", "토", "일"])
+            with col_time:
+                aca_time = st.time_input("시간", datetime.time(14, 0)) 
+                
+            submit_aca = st.form_submit_button("학원 스케쥴 추가")
+            
+            if submit_aca:
+                if aca_name and aca_days:
+                    st.session_state.academies.append({
+                        "학원명": aca_name,
+                        "요일": ", ".join(aca_days),
+                        "시간": aca_time.strftime("%H:%M")
+                    })
+                    st.success(f"{aca_name} 일정이 추가되었습니다!")
+                else:
+                    st.error("학원 이름과 요일을 모두 입력해 주세요.")
+                    
+        st.markdown("---")
         
-        # 2. 수정된 표의 제목과 데이터를 리스트로 변환
-        headers = edited_df.columns.tolist()
-        data = edited_df.fillna("").values.tolist()
+        st.subheader("📊 온유의 주간 학원 시간표 (직접 수정 가능)")
+        st.info("💡 **수정 방법:** 표 안의 글자를 **더블 클릭**하면 내용을 바로 바꿀 수 있습니다.\n\n💡 **삭제 방법:** 삭제하고 싶은 행(줄)의 제일 왼쪽 번호 부분을 클릭해서 선택한 뒤, 키보드의 `Delete` 키를 누르면 지워집니다.")
         
-        # 3. 구글 시트에 한 번에 덮어쓰기
-        if data:
-            ws_academy.update(values=[headers] + data, range_name="A1")
+        if st.session_state.academies:
+            df_academies = pd.DataFrame(st.session_state.academies)
         else:
-            ws_academy.append_row(headers) # 데이터가 다 지워졌을 땐 헤더만 남기기
+            df_academies = pd.DataFrame(columns=["학원명", "요일", "시간"])
             
-        st.success("시간표가 구글 시트와 완벽하게 동기화되었습니다!")
-        st.rerun()
+        edited_df = st.data_editor(df_academies, num_rows="dynamic", use_container_width=True)
         
-    st.markdown('</div>', unsafe_allow_html=True)
-
+        st.session_state.academies = edited_df.to_dict('records')
